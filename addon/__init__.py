@@ -9,7 +9,8 @@ def _open_dialog():
 
 
 def _add_menu():
-    action = QAction("Añadir Audio a Tarjetas...", mw)
+    from .i18n import tr
+    action = QAction(tr("menu_item"), mw)
     action.triggered.connect(_open_dialog)
     mw.form.menuTools.addAction(action)
 

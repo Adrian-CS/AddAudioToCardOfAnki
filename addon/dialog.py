@@ -21,6 +21,7 @@ from aqt.qt import (
 from aqt.utils import showInfo
 
 from .audio_fetcher import get_audio
+from .i18n import tr
 
 
 def _strip_html(text: str) -> str:
@@ -35,7 +36,7 @@ def _safe_filename(word: str, lang: str, ext: str) -> str:
 class AddAudioDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent or mw)
-        self.setWindowTitle("Añadir Audio a Tarjetas")
+        self.setWindowTitle(tr("window_title"))
         self.setMinimumWidth(420)
         self._build_ui()
         self._populate_decks()
@@ -48,25 +49,25 @@ class AddAudioDialog(QDialog):
         form = QFormLayout()
 
         self.deck_combo = QComboBox()
-        form.addRow("Mazo:", self.deck_combo)
+        form.addRow(tr("label_deck"), self.deck_combo)
 
         self.word_field_combo = QComboBox()
-        form.addRow("Campo con la palabra:", self.word_field_combo)
+        form.addRow(tr("label_word_field"), self.word_field_combo)
 
         self.audio_field_combo = QComboBox()
-        form.addRow("Campo de audio (1):", self.audio_field_combo)
+        form.addRow(tr("label_audio_field_1"), self.audio_field_combo)
 
         self.audio_field2_combo = QComboBox()
-        form.addRow("Campo de audio (2):", self.audio_field2_combo)
+        form.addRow(tr("label_audio_field_2"), self.audio_field2_combo)
 
         self.lang_combo = QComboBox()
         self.lang_combo.addItems(["es", "en", "fr", "de", "it", "pt"])
-        form.addRow("Idioma:", self.lang_combo)
+        form.addRow(tr("label_language"), self.lang_combo)
 
-        self.overwrite_check = QCheckBox("Sobreescribir audio existente")
+        self.overwrite_check = QCheckBox(tr("check_overwrite"))
         form.addRow("", self.overwrite_check)
 
-        self.tts_check = QCheckBox("Usar TTS como alternativa si no hay audio nativo")
+        self.tts_check = QCheckBox(tr("check_tts"))
         form.addRow("", self.tts_check)
 
         layout.addLayout(form)
@@ -79,9 +80,9 @@ class AddAudioDialog(QDialog):
         layout.addWidget(self.status_label)
 
         btn_layout = QHBoxLayout()
-        self.start_btn = QPushButton("Añadir Audio")
+        self.start_btn = QPushButton(tr("btn_add"))
         self.start_btn.clicked.connect(self._start)
-        self.close_btn = QPushButton("Cerrar")
+        self.close_btn = QPushButton(tr("btn_close"))
         self.close_btn.clicked.connect(self.close)
         btn_layout.addWidget(self.start_btn)
         btn_layout.addWidget(self.close_btn)
@@ -101,7 +102,7 @@ class AddAudioDialog(QDialog):
         self.word_field_combo.clear()
         self.audio_field_combo.clear()
         self.audio_field2_combo.clear()
-        self.audio_field2_combo.addItem("— ninguno —")
+        self.audio_field2_combo.addItem(tr("option_none"))
 
         deck_name = self.deck_combo.currentText()
         if not deck_name:
@@ -134,19 +135,18 @@ class AddAudioDialog(QDialog):
         word_field = self.word_field_combo.currentText()
         audio_field = self.audio_field_combo.currentText()
         audio_field2_raw = self.audio_field2_combo.currentText()
-        audio_field2 = None if audio_field2_raw == "— ninguno —" else audio_field2_raw
+        audio_field2 = None if audio_field2_raw == tr("option_none") else audio_field2_raw
         lang = self.lang_combo.currentText()
         overwrite = self.overwrite_check.isChecked()
         use_tts = self.tts_check.isChecked()
 
         if not all([deck_name, word_field, audio_field]):
-            showInfo("Por favor selecciona mazo y campos.")
+            showInfo(tr("err_select_fields"))
             return
 
-        # --- Pre-fetch note data on main thread (DB access must be here) ---
         note_ids = mw.col.find_notes(f'deck:"{deck_name}"')
         if not note_ids:
-            showInfo("El mazo está vacío.")
+            showInfo(tr("err_empty_deck"))
             return
 
         note_data = []  # (note_id, word, already_has_audio)
@@ -162,17 +162,16 @@ class AddAudioDialog(QDialog):
                 continue
 
         if not note_data:
-            showInfo("No se encontraron tarjetas con ese campo.")
+            showInfo(tr("err_no_cards"))
             return
 
         self.start_btn.setEnabled(False)
         self.progress_bar.setMaximum(len(note_data))
         self.progress_bar.setValue(0)
         self.progress_bar.setVisible(True)
-        self.status_label.setText("Descargando audio...")
+        self.status_label.setText(tr("status_downloading"))
 
         stats = {"wiktionary": 0, "tts": 0, "skipped": 0, "error": 0}
-        # (note_id, sound_tag) pairs to apply on main thread
         updates: list[tuple[int, str]] = []
 
         def process():
@@ -241,14 +240,12 @@ class AddAudioDialog(QDialog):
         self.progress_bar.setVisible(False)
         self.status_label.setText("")
 
-        lines = [
-            f"Completado — {total} tarjetas procesadas\n",
-            f"  Audio nativo (Wiktionary): {stats['wiktionary']}",
-        ]
+        lines = [tr("result_header", total=total),
+                 tr("result_wiktionary", n=stats["wiktionary"])]
         if stats["tts"]:
-            lines.append(f"  Google TTS (sintético):    {stats['tts']}")
+            lines.append(tr("result_tts", n=stats["tts"]))
         lines += [
-            f"  Saltadas (ya tienen audio): {stats['skipped']}",
-            f"  Sin audio encontrado:        {stats['error']}",
+            tr("result_skipped", n=stats["skipped"]),
+            tr("result_not_found", n=stats["error"]),
         ]
         showInfo("\n".join(lines))
