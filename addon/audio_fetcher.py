@@ -21,6 +21,8 @@ Word extraction:
 import json
 import re
 import ssl
+import time
+import threading
 import urllib.parse
 import urllib.request
 
@@ -30,6 +32,11 @@ REQUEST_TIMEOUT = 10
 HEADERS = {"User-Agent": "AnkiAddOn-AddAudioToCards/1.0"}
 
 _SSL_CTX = ssl.create_default_context()
+
+# Rate limiter: max 4 requests/sec to stay well within Wiktionary's limits.
+_rate_lock = threading.Lock()
+_last_request_time = 0.0
+_MIN_INTERVAL = 0.25  # seconds between requests
 
 # Short function words that are unlikely to have useful Spanish pronunciation
 # audio entries on Wiktionary, or would give a wrong match for a phrase.
@@ -81,12 +88,31 @@ def _candidate_words(raw: str) -> list[str]:
     return result
 
 
-def _http_get(url: str, params: dict | None = None) -> bytes:
+def _http_get(url: str, params: dict | None = None, download: bool = False) -> bytes:
+    global _last_request_time
     if params:
         url = url + "?" + urllib.parse.urlencode(params)
+
+    # Rate limiting: enforce minimum interval between requests
+    with _rate_lock:
+        wait = _MIN_INTERVAL - (time.monotonic() - _last_request_time)
+        if wait > 0:
+            time.sleep(wait)
+        _last_request_time = time.monotonic()
+
+    timeout = 20 if download else REQUEST_TIMEOUT
     req = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT, context=_SSL_CTX) as resp:
-        return resp.read()
+
+    # Retry once on failure (handles transient network errors)
+    for attempt in range(2):
+        try:
+            with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CTX) as resp:
+                return resp.read()
+        except Exception:
+            if attempt == 0:
+                time.sleep(1)
+            else:
+                raise
 
 
 def _http_get_json(url: str, params: dict | None = None) -> dict:
@@ -161,7 +187,7 @@ def fetch_wiktionary_audio(word: str) -> bytes | None:
         url = _find_wiktionary_audio_url(candidate)
         if url:
             try:
-                data = _http_get(url)
+                data = _http_get(url, download=True)
                 if data:
                     return data
             except Exception:
