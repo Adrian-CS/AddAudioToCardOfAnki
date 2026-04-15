@@ -3,7 +3,7 @@
     "name": "Add Audio to Cards (Wiktionary + TTS)",
     "mod": 0,
     "min_point_version": 50,
-    "max_point_version": -1,
+    "max_point_version": 0,
     "conflicts": [],
     "tags": ["audio", "pronunciation", "spanish"]
 }
