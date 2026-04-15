@@ -45,10 +45,15 @@ HEADERS = {"User-Agent": "AnkiAddOn-AddAudioToCards/1.0"}
 
 _SSL_CTX = ssl.create_default_context()
 
-# Rate limiter: max 4 requests/sec to stay well within Wiktionary's limits.
-_rate_lock = threading.Lock()
-_last_request_time = 0.0
-_MIN_INTERVAL = 0.25  # seconds between requests
+# Separate rate limiters: Wiktionary API and upload.wikimedia.org (audio files)
+# have independent rate limits — the download CDN is more aggressive.
+_api_lock = threading.Lock()
+_api_last = 0.0
+_API_INTERVAL = 0.25   # 4 API req/sec — safe for en.wiktionary.org
+
+_dl_lock = threading.Lock()
+_dl_last = 0.0
+_DL_INTERVAL = 1.0     # 1 download/sec — avoids 429 from upload.wikimedia.org
 
 # Short function words that are unlikely to have useful Spanish pronunciation
 # audio entries on Wiktionary, or would give a wrong match for a phrase.
@@ -101,27 +106,46 @@ def _candidate_words(raw: str) -> list[str]:
 
 
 def _http_get(url: str, params: dict | None = None, download: bool = False) -> bytes:
-    global _last_request_time
+    global _api_last, _dl_last
+
     if params:
         url = url + "?" + urllib.parse.urlencode(params)
+    elif download and "?" in url:
+        # Strip UTM/tracking params added by Wikimedia's imageinfo API
+        url = url.split("?")[0]
 
-    # Rate limiting: enforce minimum interval between requests
-    with _rate_lock:
-        wait = _MIN_INTERVAL - (time.monotonic() - _last_request_time)
-        if wait > 0:
-            time.sleep(wait)
-        _last_request_time = time.monotonic()
+    # Apply the appropriate rate limiter
+    if download:
+        with _dl_lock:
+            wait = _DL_INTERVAL - (time.monotonic() - _dl_last)
+            if wait > 0:
+                time.sleep(wait)
+            _dl_last = time.monotonic()
+    else:
+        with _api_lock:
+            wait = _API_INTERVAL - (time.monotonic() - _api_last)
+            if wait > 0:
+                time.sleep(wait)
+            _api_last = time.monotonic()
 
     timeout = 20 if download else REQUEST_TIMEOUT
     req = urllib.request.Request(url, headers=HEADERS)
 
-    # Retry once on failure (handles transient network errors)
-    for attempt in range(2):
+    for attempt in range(3):
         try:
             with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CTX) as resp:
                 return resp.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                # Back off progressively on rate-limit responses
+                backoff = 5 * (attempt + 1)
+                _log(f"[429] {url} — waiting {backoff}s (attempt {attempt + 1})")
+                time.sleep(backoff)
+                if attempt < 2:
+                    continue
+            raise
         except Exception:
-            if attempt == 0:
+            if attempt < 2:
                 time.sleep(1)
             else:
                 raise
