@@ -54,7 +54,10 @@ class AddAudioDialog(QDialog):
         form.addRow("Campo con la palabra:", self.word_field_combo)
 
         self.audio_field_combo = QComboBox()
-        form.addRow("Campo de audio:", self.audio_field_combo)
+        form.addRow("Campo de audio (1):", self.audio_field_combo)
+
+        self.audio_field2_combo = QComboBox()
+        form.addRow("Campo de audio (2):", self.audio_field2_combo)
 
         self.lang_combo = QComboBox()
         self.lang_combo.addItems(["es", "en", "fr", "de", "it", "pt"])
@@ -97,6 +100,8 @@ class AddAudioDialog(QDialog):
     def _populate_fields(self):
         self.word_field_combo.clear()
         self.audio_field_combo.clear()
+        self.audio_field2_combo.clear()
+        self.audio_field2_combo.addItem("— ninguno —")
 
         deck_name = self.deck_combo.currentText()
         if not deck_name:
@@ -112,6 +117,7 @@ class AddAudioDialog(QDialog):
         for name in field_names:
             self.word_field_combo.addItem(name)
             self.audio_field_combo.addItem(name)
+            self.audio_field2_combo.addItem(name)
 
         # Auto-select sensible defaults
         for i, name in enumerate(field_names):
@@ -127,6 +133,8 @@ class AddAudioDialog(QDialog):
         deck_name = self.deck_combo.currentText()
         word_field = self.word_field_combo.currentText()
         audio_field = self.audio_field_combo.currentText()
+        audio_field2_raw = self.audio_field2_combo.currentText()
+        audio_field2 = None if audio_field2_raw == "— ninguno —" else audio_field2_raw
         lang = self.lang_combo.currentText()
         overwrite = self.overwrite_check.isChecked()
         use_tts = self.tts_check.isChecked()
@@ -200,8 +208,9 @@ class AddAudioDialog(QDialog):
                     lambda v=i + 1: self.progress_bar.setValue(v)
                 )
 
+            audio_fields = [f for f in [audio_field, audio_field2] if f]
             mw.taskman.run_on_main(
-                lambda: self._apply_updates(updates, audio_field, stats, len(note_data))
+                lambda: self._apply_updates(updates, audio_fields, stats, len(note_data))
             )
 
         mw.taskman.run_in_background(process)
@@ -209,7 +218,7 @@ class AddAudioDialog(QDialog):
     def _apply_updates(
         self,
         updates: list[tuple[int, str]],
-        audio_field: str,
+        audio_fields: list[str],
         stats: dict,
         total: int,
     ):
@@ -217,8 +226,12 @@ class AddAudioDialog(QDialog):
         for nid, sound_tag in updates:
             try:
                 note = mw.col.get_note(nid)
-                if audio_field in note.keys():
-                    note[audio_field] = sound_tag
+                changed = False
+                for field in audio_fields:
+                    if field in note.keys():
+                        note[field] = sound_tag
+                        changed = True
+                if changed:
                     mw.col.update_note(note)
             except Exception:
                 stats["error"] += 1
