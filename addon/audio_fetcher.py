@@ -4,24 +4,36 @@ from __future__ import annotations
 Audio fetching logic.
 
 Priority:
-  1. Spanish Wiktionary — native human recordings (.ogg/.wav)
-  2. Google Translate TTS fallback — synthetic but decent quality
+  1. English Wiktionary — native human recordings for Spanish (.ogg/.wav)
+     Better coverage than Spanish Wiktionary (~100% vs ~57% for common words).
+     Filters for files tagged as Spanish: LL-Q1321 (spa)-*, Es-*, es-*.
+  2. Google Translate TTS — synthetic fallback (optional, user-controlled).
 
-Both are free and require no API key.
+No API key required.
 """
 
 import re
 import requests
 
-WIKTIONARY_API = "https://es.wiktionary.org/w/api.php"
+WIKTIONARY_API = "https://en.wiktionary.org/w/api.php"
 GTTS_URL = "https://translate.google.com/translate_tts"
 REQUEST_TIMEOUT = 10
 
 
+def _is_spanish_audio(title: str) -> bool:
+    """Return True if a Wiktionary file title looks like a Spanish pronunciation."""
+    # Strip namespace prefix: "File:" or "Archivo:"
+    name = re.sub(r"^(file|archivo):\s*", "", title, flags=re.IGNORECASE).lower()
+    return (
+        "q1321" in name       # LL-Q1321 (spa)-Speaker-word.* — community recordings
+        or "(spa)" in name    # explicit Spanish language tag
+        or name.startswith("es-")  # Es-word.ogg / Es-am-lat-word.ogg / es-word.ogg
+    )
+
+
 def _find_wiktionary_audio_url(word: str) -> str | None:
-    """Return the direct download URL of a pronunciation file from Spanish Wiktionary, or None."""
+    """Return the CDN URL of a native Spanish pronunciation file, or None."""
     try:
-        # Step 1: get all files linked on the word's page
         resp = requests.get(WIKTIONARY_API, params={
             "action": "query",
             "titles": word,
@@ -38,17 +50,17 @@ def _find_wiktionary_audio_url(word: str) -> str | None:
     for page in pages.values():
         images.extend(page.get("images", []))
 
-    # Keep only audio files (Wiktionary uses .ogg and .wav for pronunciations)
+    # Keep only Spanish audio files
     audio_titles = [
         img["title"] for img in images
         if re.search(r"\.(ogg|wav|flac)$", img["title"], re.IGNORECASE)
+        and _is_spanish_audio(img["title"])
     ]
 
     if not audio_titles:
         return None
 
     try:
-        # Step 2: resolve to a direct CDN URL
         resp2 = requests.get(WIKTIONARY_API, params={
             "action": "query",
             "titles": audio_titles[0],
@@ -70,7 +82,7 @@ def _find_wiktionary_audio_url(word: str) -> str | None:
 
 
 def fetch_wiktionary_audio(word: str) -> bytes | None:
-    """Download native audio bytes from Spanish Wiktionary, or None if not found."""
+    """Download native Spanish audio from Wiktionary, or None if not found."""
     url = _find_wiktionary_audio_url(word)
     if not url:
         return None
@@ -84,7 +96,7 @@ def fetch_wiktionary_audio(word: str) -> bytes | None:
 
 
 def fetch_gtts_audio(word: str, lang: str = "es") -> bytes | None:
-    """Download TTS audio bytes from Google Translate (unofficial endpoint), or None."""
+    """Download TTS audio from Google Translate (unofficial endpoint), or None."""
     try:
         resp = requests.get(
             GTTS_URL,
@@ -99,9 +111,14 @@ def fetch_gtts_audio(word: str, lang: str = "es") -> bytes | None:
     return None
 
 
-def get_audio(word: str, lang: str = "es") -> tuple[bytes | None, str]:
+def get_audio(word: str, lang: str = "es", use_tts: bool = False) -> tuple[bytes | None, str]:
     """
-    Fetch audio for a word, trying Wiktionary first then Google TTS.
+    Fetch audio for a word.
+
+    Args:
+        word:    The word to look up.
+        lang:    BCP-47 language code (used for TTS fallback).
+        use_tts: If True and no native audio is found, fall back to Google TTS.
 
     Returns:
         (audio_bytes, source) where source is 'wiktionary', 'tts', or 'none'.
@@ -110,8 +127,9 @@ def get_audio(word: str, lang: str = "es") -> tuple[bytes | None, str]:
     if data:
         return data, "wiktionary"
 
-    data = fetch_gtts_audio(word, lang)
-    if data:
-        return data, "tts"
+    if use_tts:
+        data = fetch_gtts_audio(word, lang)
+        if data:
+            return data, "tts"
 
     return None, "none"

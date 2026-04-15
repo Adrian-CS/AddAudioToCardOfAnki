@@ -63,6 +63,9 @@ class AddAudioDialog(QDialog):
         self.overwrite_check = QCheckBox("Sobreescribir audio existente")
         form.addRow("", self.overwrite_check)
 
+        self.tts_check = QCheckBox("Usar TTS como alternativa si no hay audio nativo")
+        form.addRow("", self.tts_check)
+
         layout.addLayout(form)
 
         self.progress_bar = QProgressBar()
@@ -126,6 +129,7 @@ class AddAudioDialog(QDialog):
         audio_field = self.audio_field_combo.currentText()
         lang = self.lang_combo.currentText()
         overwrite = self.overwrite_check.isChecked()
+        use_tts = self.tts_check.isChecked()
 
         if not all([deck_name, word_field, audio_field]):
             showInfo("Por favor selecciona mazo y campos.")
@@ -180,7 +184,7 @@ class AddAudioDialog(QDialog):
                     )
                     continue
 
-                audio_bytes, source = get_audio(word, lang)
+                audio_bytes, source = get_audio(word, lang, use_tts)
 
                 if audio_bytes:
                     ext = "ogg" if source == "wiktionary" else "mp3"
@@ -224,10 +228,14 @@ class AddAudioDialog(QDialog):
         self.progress_bar.setVisible(False)
         self.status_label.setText("")
 
-        showInfo(
-            f"Completado — {total} tarjetas procesadas\n\n"
-            f"  Wiktionary (audio nativo): {stats['wiktionary']}\n"
-            f"  Google TTS (sintético):    {stats['tts']}\n"
-            f"  Saltadas (ya tienen audio): {stats['skipped']}\n"
-            f"  Sin audio encontrado:       {stats['error']}"
-        )
+        lines = [
+            f"Completado — {total} tarjetas procesadas\n",
+            f"  Audio nativo (Wiktionary): {stats['wiktionary']}",
+        ]
+        if stats["tts"]:
+            lines.append(f"  Google TTS (sintético):    {stats['tts']}")
+        lines += [
+            f"  Saltadas (ya tienen audio): {stats['skipped']}",
+            f"  Sin audio encontrado:        {stats['error']}",
+        ]
+        showInfo("\n".join(lines))
