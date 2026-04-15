@@ -9,24 +9,42 @@ Priority:
      Filters for files tagged as Spanish: LL-Q1321 (spa)-*, Es-*, es-*.
   2. Google Translate TTS — synthetic fallback (optional, user-controlled).
 
-No API key required.
+Uses only stdlib (urllib) so it works in any Anki Python environment.
 """
 
+import json
 import re
-import requests
+import ssl
+import urllib.parse
+import urllib.request
 
 WIKTIONARY_API = "https://en.wiktionary.org/w/api.php"
 GTTS_URL = "https://translate.google.com/translate_tts"
 REQUEST_TIMEOUT = 10
+HEADERS = {"User-Agent": "AnkiAddOn-AddAudioToCards/1.0"}
+
+# Use default SSL context (system certs). Works in Anki's bundled Python.
+_SSL_CTX = ssl.create_default_context()
+
+
+def _http_get(url: str, params: dict | None = None) -> bytes:
+    if params:
+        url = url + "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers=HEADERS)
+    with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT, context=_SSL_CTX) as resp:
+        return resp.read()
+
+
+def _http_get_json(url: str, params: dict | None = None) -> dict:
+    return json.loads(_http_get(url, params))
 
 
 def _is_spanish_audio(title: str) -> bool:
     """Return True if a Wiktionary file title looks like a Spanish pronunciation."""
-    # Strip namespace prefix: "File:" or "Archivo:"
     name = re.sub(r"^(file|archivo):\s*", "", title, flags=re.IGNORECASE).lower()
     return (
-        "q1321" in name       # LL-Q1321 (spa)-Speaker-word.* — community recordings
-        or "(spa)" in name    # explicit Spanish language tag
+        "q1321" in name        # LL-Q1321 (spa)-Speaker-word.* — community recordings
+        or "(spa)" in name     # explicit Spanish language tag
         or name.startswith("es-")  # Es-word.ogg / Es-am-lat-word.ogg / es-word.ogg
     )
 
@@ -34,14 +52,13 @@ def _is_spanish_audio(title: str) -> bool:
 def _find_wiktionary_audio_url(word: str) -> str | None:
     """Return the CDN URL of a native Spanish pronunciation file, or None."""
     try:
-        resp = requests.get(WIKTIONARY_API, params={
+        data = _http_get_json(WIKTIONARY_API, {
             "action": "query",
             "titles": word,
             "prop": "images",
             "imlimit": "50",
             "format": "json",
-        }, timeout=REQUEST_TIMEOUT)
-        data = resp.json()
+        })
     except Exception:
         return None
 
@@ -50,7 +67,6 @@ def _find_wiktionary_audio_url(word: str) -> str | None:
     for page in pages.values():
         images.extend(page.get("images", []))
 
-    # Keep only Spanish audio files
     audio_titles = [
         img["title"] for img in images
         if re.search(r"\.(ogg|wav|flac)$", img["title"], re.IGNORECASE)
@@ -61,14 +77,13 @@ def _find_wiktionary_audio_url(word: str) -> str | None:
         return None
 
     try:
-        resp2 = requests.get(WIKTIONARY_API, params={
+        data2 = _http_get_json(WIKTIONARY_API, {
             "action": "query",
             "titles": audio_titles[0],
             "prop": "imageinfo",
             "iiprop": "url",
             "format": "json",
-        }, timeout=REQUEST_TIMEOUT)
-        data2 = resp2.json()
+        })
     except Exception:
         return None
 
@@ -87,28 +102,24 @@ def fetch_wiktionary_audio(word: str) -> bytes | None:
     if not url:
         return None
     try:
-        resp = requests.get(url, timeout=15)
-        if resp.status_code == 200 and resp.content:
-            return resp.content
+        return _http_get(url)
     except Exception:
-        pass
-    return None
+        return None
 
 
 def fetch_gtts_audio(word: str, lang: str = "es") -> bytes | None:
     """Download TTS audio from Google Translate (unofficial endpoint), or None."""
     try:
-        resp = requests.get(
-            GTTS_URL,
-            params={"ie": "UTF-8", "q": word, "tl": lang, "client": "tw-ob"},
-            headers={"User-Agent": "Mozilla/5.0"},
-            timeout=REQUEST_TIMEOUT,
-        )
-        if resp.status_code == 200 and resp.content:
-            return resp.content
+        params = urllib.parse.urlencode({
+            "ie": "UTF-8", "q": word, "tl": lang, "client": "tw-ob"
+        })
+        url = GTTS_URL + "?" + params
+        req = urllib.request.Request(url, headers={**HEADERS, "User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=REQUEST_TIMEOUT, context=_SSL_CTX) as resp:
+            data = resp.read()
+        return data if data else None
     except Exception:
-        pass
-    return None
+        return None
 
 
 def get_audio(word: str, lang: str = "es", use_tts: bool = False) -> tuple[bytes | None, str]:
