@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """
 Main UI dialog for the add-on.
 
@@ -142,7 +144,7 @@ class AddAudioDialog(QDialog):
                 if word_field not in note.keys():
                     continue
                 word = _strip_html(note[word_field])
-                has_audio = "[sound:" in note.get(audio_field, "")
+                has_audio = "[sound:" in (note[audio_field] if audio_field in note.keys() else "")
                 note_data.append((nid, word, has_audio))
             except Exception:
                 continue
