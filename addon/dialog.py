@@ -20,7 +20,7 @@ from aqt.qt import (
 )
 from aqt.utils import showInfo
 
-from .audio_fetcher import get_audio
+from .audio_fetcher import get_audio, _LOG
 from .i18n import tr
 
 
@@ -248,4 +248,6 @@ class AddAudioDialog(QDialog):
             tr("result_skipped", n=stats["skipped"]),
             tr("result_not_found", n=stats["error"]),
         ]
+        if stats["error"]:
+            lines.append(f"\nDebug log: {_LOG}")
         showInfo("\n".join(lines))

@@ -19,12 +19,24 @@ Word extraction:
 """
 
 import json
+import os
 import re
 import ssl
+import tempfile
 import time
 import threading
 import urllib.parse
 import urllib.request
+
+_LOG = os.path.join(tempfile.gettempdir(), "anki_add_audio.log")
+
+
+def _log(msg: str) -> None:
+    try:
+        with open(_LOG, "a", encoding="utf-8") as f:
+            f.write(msg + "\n")
+    except Exception:
+        pass
 
 WIKTIONARY_API = "https://en.wiktionary.org/w/api.php"
 GTTS_URL = "https://translate.google.com/translate_tts"
@@ -139,7 +151,8 @@ def _find_wiktionary_audio_url(word: str) -> str | None:
             "imlimit": "50",
             "format": "json",
         })
-    except Exception:
+    except Exception as e:
+        _log(f"[API-1 FAIL] {word!r}: {e}")
         return None
 
     pages = data.get("query", {}).get("pages", {})
@@ -154,6 +167,7 @@ def _find_wiktionary_audio_url(word: str) -> str | None:
     ]
 
     if not audio_titles:
+        _log(f"[NO-AUDIO] {word!r} — images: {[i['title'] for i in images]}")
         return None
 
     try:
@@ -164,15 +178,18 @@ def _find_wiktionary_audio_url(word: str) -> str | None:
             "iiprop": "url",
             "format": "json",
         })
-    except Exception:
+    except Exception as e:
+        _log(f"[API-2 FAIL] {word!r} / {audio_titles[0]!r}: {e}")
         return None
 
     for page in data2.get("query", {}).get("pages", {}).values():
         for info in page.get("imageinfo", []):
             url = info.get("url")
             if url:
+                _log(f"[OK] {word!r} → {url}")
                 return url
 
+    _log(f"[NO-URL] {word!r} — imageinfo returned no url")
     return None
 
 
@@ -190,7 +207,8 @@ def fetch_wiktionary_audio(word: str) -> bytes | None:
                 data = _http_get(url, download=True)
                 if data:
                     return data
-            except Exception:
+            except Exception as e:
+                _log(f"[DOWNLOAD FAIL] {candidate!r} ({url}): {e}")
                 continue
     return None
 
