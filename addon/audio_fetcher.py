@@ -10,6 +10,12 @@ Priority:
   2. Google Translate TTS — synthetic fallback (optional, user-controlled).
 
 Uses only stdlib (urllib) so it works in any Anki Python environment.
+
+Word extraction:
+  Fields often contain phrases or mixed-language entries like:
+    "floor piso planta", "already/ya", "cuál?", "de la mañana"
+  _candidate_words() splits these into individual candidates and tries
+  each one until Wiktionary returns a Spanish audio file.
 """
 
 import json
@@ -23,8 +29,56 @@ GTTS_URL = "https://translate.google.com/translate_tts"
 REQUEST_TIMEOUT = 10
 HEADERS = {"User-Agent": "AnkiAddOn-AddAudioToCards/1.0"}
 
-# Use default SSL context (system certs). Works in Anki's bundled Python.
 _SSL_CTX = ssl.create_default_context()
+
+# Short function words that are unlikely to have useful Spanish pronunciation
+# audio entries on Wiktionary, or would give a wrong match for a phrase.
+_STOP_WORDS = frozenset({
+    "de", "la", "el", "los", "las", "del", "un", "una", "en", "a", "y", "o",
+    "al", "su", "lo", "le", "me", "te", "se", "mi", "tu", "por", "para",
+    "con", "sin", "que", "si", "no", "ya",
+    "the", "an", "of", "in", "on", "at", "to", "for", "is", "are", "or",
+})
+
+
+def _candidate_words(raw: str) -> list[str]:
+    """
+    Extract lookup candidates from a potentially multi-word field value.
+
+    Examples:
+        "cuál?"              → ["cuál"]
+        "floor piso planta"  → ["floor", "piso", "planta"]
+        "already/ya"         → ["already"]          (ya filtered: stop word)
+        "de la mañana"       → ["mañana"]           (de, la filtered: stop words)
+        "adelante,aquí tiene"→ ["adelante", "aquí", "tiene"]
+        "hablar"             → ["hablar"]
+    """
+    # Remove punctuation that doesn't belong in a word lookup
+    cleaned = re.sub(r"[?!.;:~()\[\]_]", " ", raw).strip()
+
+    # Split on slashes, commas, and whitespace
+    parts = re.split(r"[/,\s]+", cleaned)
+
+    candidates = []
+    for p in parts:
+        p = p.strip()
+        if (
+            p
+            and len(p) >= 2
+            and p.lower() not in _STOP_WORDS
+            and not p.isdigit()
+            and not re.fullmatch(r"[^\w\u00C0-\u024F]+", p)  # skip pure punctuation
+        ):
+            candidates.append(p)
+
+    # Deduplicate preserving order
+    seen: set[str] = set()
+    result = []
+    for c in candidates:
+        if c.lower() not in seen:
+            seen.add(c.lower())
+            result.append(c)
+    return result
 
 
 def _http_get(url: str, params: dict | None = None) -> bytes:
@@ -50,7 +104,7 @@ def _is_spanish_audio(title: str) -> bool:
 
 
 def _find_wiktionary_audio_url(word: str) -> str | None:
-    """Return the CDN URL of a native Spanish pronunciation file, or None."""
+    """Return the CDN URL of a native Spanish pronunciation file for word, or None."""
     try:
         data = _http_get_json(WIKTIONARY_API, {
             "action": "query",
@@ -97,14 +151,22 @@ def _find_wiktionary_audio_url(word: str) -> str | None:
 
 
 def fetch_wiktionary_audio(word: str) -> bytes | None:
-    """Download native Spanish audio from Wiktionary, or None if not found."""
-    url = _find_wiktionary_audio_url(word)
-    if not url:
-        return None
-    try:
-        return _http_get(url)
-    except Exception:
-        return None
+    """
+    Download native Spanish audio from Wiktionary, or None if not found.
+
+    Tries each candidate word extracted from the field value in order,
+    returning the first audio found.
+    """
+    for candidate in _candidate_words(word):
+        url = _find_wiktionary_audio_url(candidate)
+        if url:
+            try:
+                data = _http_get(url)
+                if data:
+                    return data
+            except Exception:
+                continue
+    return None
 
 
 def fetch_gtts_audio(word: str, lang: str = "es") -> bytes | None:
@@ -127,7 +189,7 @@ def get_audio(word: str, lang: str = "es", use_tts: bool = False) -> tuple[bytes
     Fetch audio for a word.
 
     Args:
-        word:    The word to look up.
+        word:    The word/phrase from the Anki field.
         lang:    BCP-47 language code (used for TTS fallback).
         use_tts: If True and no native audio is found, fall back to Google TTS.
 
