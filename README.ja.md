@@ -1,6 +1,6 @@
 # カードに音声を追加
 
-[English](README.md)
+[English](README.md) | [Español](README.es.md)
 
 Wiktionary からネイティブ音声を取得して、Anki のフラッシュカードに自動的に追加するアドオンです。12言語に対応。API キー不要。完全無料。
 
