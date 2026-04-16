@@ -30,22 +30,24 @@ Wiktionary hosts real recordings made by native speakers, stored on Wikimedia Co
 
 ### Supported languages
 
-| Language | Code | Coverage |
-|---|---|---|
-| Arabic | `ar` | Moderate |
-| Chinese | `zh` | Good |
-| Dutch | `nl` | Good |
-| English | `en` | Excellent |
-| French | `fr` | Excellent |
-| German | `de` | Excellent |
-| Italian | `it` | Good |
-| Japanese | `ja` | Good |
-| Korean | `ko` | Moderate |
-| Portuguese | `pt` | Good |
-| Russian | `ru` | Good |
-| Spanish | `es` | Excellent |
+Coverage is based on the number of native human recordings available on Wikimedia Commons (Lingua Libre project data, 2024).
 
-Coverage for common vocabulary in well-resourced languages (EN, ES, FR, DE) is ~100%. Less common words or less-resourced languages may not have recordings yet.
+| Language | Code | Recordings | Coverage | Notes |
+|---|---|---|---|---|
+| French | `fr` | ~430 000 | Excellent | Best-covered language by far |
+| English | `en` | ~105 000 | Excellent | |
+| German | `de` | ~25 000 | Good | |
+| Russian | `ru` | ~17 000 | Good | |
+| Arabic | `ar` | ~13 000 | Good | |
+| Italian | `it` | ~12 000 | Good | |
+| Portuguese | `pt` | ~8 000 | Moderate | |
+| Spanish | `es` | ~5 000–10 000 | Moderate | ~40% on typical vocabulary decks |
+| Dutch | `nl` | ~1 800 | Limited | ⚠ TTS fallback recommended |
+| Japanese | `ja` | ~1 000 | Limited | ⚠ Native Wiktionary queried first |
+| Korean | `ko` | ~1 000 | Limited | ⚠ Native Wiktionary queried first |
+| Chinese | `zh` | < 50 | Very low | ⚠ Almost no recordings; TTS strongly recommended |
+
+For Japanese, Korean, and Chinese the add-on automatically queries the native language Wiktionary (ja/ko/zh.wiktionary.org) before falling back to the English one, which improves hit rates for those languages. The dialog shows a warning when a low-coverage language is selected.
 
 ---
 

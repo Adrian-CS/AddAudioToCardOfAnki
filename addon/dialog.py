@@ -20,7 +20,7 @@ from aqt.qt import (
 )
 from aqt.utils import showInfo
 
-from .audio_fetcher import get_audio, LANGUAGES, _LOG
+from .audio_fetcher import get_audio, LANGUAGES, LANG_COVERAGE, _LOG
 from .i18n import tr
 
 
@@ -69,6 +69,12 @@ class AddAudioDialog(QDialog):
             self.lang_combo.setCurrentIndex(idx)
         form.addRow(tr("label_language"), self.lang_combo)
 
+        self.coverage_label = QLabel("")
+        self.coverage_label.setWordWrap(True)
+        self.coverage_label.setStyleSheet("color: #b35900; font-size: 11px;")
+        form.addRow("", self.coverage_label)
+        self.lang_combo.currentIndexChanged.connect(self._update_coverage_warning)
+
         self.overwrite_check = QCheckBox(tr("check_overwrite"))
         form.addRow("", self.overwrite_check)
 
@@ -94,6 +100,21 @@ class AddAudioDialog(QDialog):
         layout.addLayout(btn_layout)
 
         self.deck_combo.currentIndexChanged.connect(self._populate_fields)
+        self._update_coverage_warning()
+
+    # --------------------------------------------------------- Coverage warn
+
+    _COVERAGE_MESSAGES = {
+        "low":     "⚠ Very limited native audio for this language. Enable TTS fallback for best results.",
+        "limited": "⚠ Limited native audio for this language. TTS fallback recommended for uncommon words.",
+    }
+
+    def _update_coverage_warning(self):
+        code = self.lang_combo.currentData() or ""
+        tier = LANG_COVERAGE.get(code, "")
+        msg = self._COVERAGE_MESSAGES.get(tier, "")
+        self.coverage_label.setText(msg)
+        self.coverage_label.setVisible(bool(msg))
 
     # ----------------------------------------------------------- Population
 

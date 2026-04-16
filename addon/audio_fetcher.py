@@ -62,6 +62,31 @@ LANGUAGES: dict[str, tuple[str, str, str]] = {
 
 WIKTIONARY_API = "https://en.wiktionary.org/w/api.php"
 GTTS_URL = "https://translate.google.com/translate_tts"
+
+# For CJK languages the native Wiktionary has far more audio than en.wiktionary.
+# We query it first, then fall back to en.wiktionary.org.
+_NATIVE_WIKTIONARY: dict[str, str] = {
+    "ja": "https://ja.wiktionary.org/w/api.php",
+    "ko": "https://ko.wiktionary.org/w/api.php",
+    "zh": "https://zh.wiktionary.org/w/api.php",
+}
+
+# Coverage tier for each language (used by the UI to show warnings).
+# "low" → warn user and recommend TTS fallback.
+LANG_COVERAGE: dict[str, str] = {
+    "ar": "good",
+    "zh": "low",
+    "nl": "limited",
+    "en": "excellent",
+    "fr": "excellent",
+    "de": "good",
+    "it": "good",
+    "ja": "limited",
+    "ko": "limited",
+    "pt": "moderate",
+    "ru": "good",
+    "es": "moderate",
+}
 REQUEST_TIMEOUT = 10
 HEADERS = {"User-Agent": "AnkiAddOn-AddAudioToCards/1.0"}
 
@@ -180,10 +205,16 @@ def _is_target_audio(title: str, lang: str) -> bool:
     )
 
 
-def _find_wiktionary_audio_url(word: str, lang: str) -> str | None:
+def _find_wiktionary_audio_url(
+    word: str, lang: str, api_url: str = WIKTIONARY_API
+) -> str | None:
     """Return the CDN URL of a native pronunciation file for *word* in *lang*."""
+    # On native Wiktionaries (ja/ko/zh) every file on the page is likely in the
+    # target language, so we accept any audio file without language filtering.
+    strict_filter = api_url == WIKTIONARY_API
+
     try:
-        data = _http_get_json(WIKTIONARY_API, {
+        data = _http_get_json(api_url, {
             "action": "query",
             "titles": word,
             "prop": "images",
@@ -191,7 +222,7 @@ def _find_wiktionary_audio_url(word: str, lang: str) -> str | None:
             "format": "json",
         })
     except Exception as e:
-        _log(f"[API-1 FAIL] {word!r}: {e}")
+        _log(f"[API-1 FAIL] {word!r} ({api_url}): {e}")
         return None
 
     pages = data.get("query", {}).get("pages", {})
@@ -202,13 +233,14 @@ def _find_wiktionary_audio_url(word: str, lang: str) -> str | None:
     audio_titles = [
         img["title"] for img in images
         if re.search(r"\.(ogg|wav|flac)$", img["title"], re.IGNORECASE)
-        and _is_target_audio(img["title"], lang)
+        and (not strict_filter or _is_target_audio(img["title"], lang))
     ]
 
     if not audio_titles:
-        _log(f"[NO-AUDIO] {word!r} ({lang}) — images: {[i['title'] for i in images]}")
+        _log(f"[NO-AUDIO] {word!r} ({lang}@{api_url}) — images: {[i['title'] for i in images]}")
         return None
 
+    # imageinfo can always be resolved via en.wiktionary (files live on Commons)
     try:
         data2 = _http_get_json(WIKTIONARY_API, {
             "action": "query",
@@ -234,16 +266,24 @@ def _find_wiktionary_audio_url(word: str, lang: str) -> str | None:
 
 def fetch_wiktionary_audio(word: str, lang: str = "es") -> bytes | None:
     """Download native audio from Wiktionary for *word* in *lang*, or None."""
+    # Build ordered list of API endpoints to try.
+    # Native Wiktionary first (better coverage for CJK), then en.wiktionary fallback.
+    endpoints: list[str] = []
+    if lang in _NATIVE_WIKTIONARY:
+        endpoints.append(_NATIVE_WIKTIONARY[lang])
+    if WIKTIONARY_API not in endpoints:
+        endpoints.append(WIKTIONARY_API)
+
     for candidate in _candidate_words(word):
-        url = _find_wiktionary_audio_url(candidate, lang)
-        if url:
-            try:
-                data = _http_get(url, download=True)
-                if data:
-                    return data
-            except Exception as e:
-                _log(f"[DOWNLOAD FAIL] {candidate!r} ({url}): {e}")
-                continue
+        for api_url in endpoints:
+            url = _find_wiktionary_audio_url(candidate, lang, api_url)
+            if url:
+                try:
+                    data = _http_get(url, download=True)
+                    if data:
+                        return data
+                except Exception as e:
+                    _log(f"[DOWNLOAD FAIL] {candidate!r} ({url}): {e}")
     return None
 
 
