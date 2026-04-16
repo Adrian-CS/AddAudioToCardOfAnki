@@ -1,5 +1,7 @@
 # Add Audio to Cards
 
+[日本語](README.ja.md)
+
 An Anki add-on that automatically adds **native human audio** to your flashcards by fetching pronunciation recordings from Wiktionary. Supports 12 languages. No API key required. Completely free.
 
 ---
