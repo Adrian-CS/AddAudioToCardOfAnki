@@ -1,6 +1,6 @@
 # Add Audio to Cards
 
-An Anki add-on that automatically adds **native human audio** to your flashcards by fetching pronunciation recordings from Wiktionary. No API key required. Completely free.
+An Anki add-on that automatically adds **native human audio** to your flashcards by fetching pronunciation recordings from Wiktionary. Supports 12 languages. No API key required. Completely free.
 
 ---
 
@@ -26,9 +26,26 @@ flowchart TD
 
 ### Why Wiktionary?
 
-Wiktionary hosts real recordings made by native speakers, stored on Wikimedia Commons and freely licensed. Spanish recordings follow the naming pattern `LL-Q1321 (spa)-Speaker-word.wav`, which the add-on uses to filter out non-Spanish files.
+Wiktionary hosts real recordings made by native speakers, stored on Wikimedia Commons and freely licensed. Each language has its own naming pattern — for example, Spanish recordings follow `LL-Q1321 (spa)-Speaker-word.wav` — which the add-on uses to filter results to the correct language.
 
-Coverage for common Spanish vocabulary is ~100%. Less common words may not have recordings yet.
+### Supported languages
+
+| Language | Code | Coverage |
+|---|---|---|
+| Arabic | `ar` | Moderate |
+| Chinese | `zh` | Good |
+| Dutch | `nl` | Good |
+| English | `en` | Excellent |
+| French | `fr` | Excellent |
+| German | `de` | Excellent |
+| Italian | `it` | Good |
+| Japanese | `ja` | Good |
+| Korean | `ko` | Moderate |
+| Portuguese | `pt` | Good |
+| Russian | `ru` | Good |
+| Spanish | `es` | Excellent |
+
+Coverage for common vocabulary in well-resourced languages (EN, ES, FR, DE) is ~100%. Less common words or less-resourced languages may not have recordings yet.
 
 ---
 
@@ -78,7 +95,7 @@ The add-on appears under **Tools → Add Audio to Cards...**
 | **Word field** | The field containing the word or phrase to look up |
 | **Audio field (1)** | The field where the `[sound:…]` tag will be written |
 | **Audio field (2)** | *(optional)* A second field to receive the same audio — useful for cards that play audio on both sides |
-| **Language** | BCP-47 code for TTS fallback (`es`, `en`, `fr`, `de`, `it`, `pt`) |
+| **Language** | Target language for audio lookup and TTS fallback |
 
 ### 3. Options
 
@@ -109,13 +126,12 @@ Coverage depends on what is in your word field:
 
 | Field content | Example | Result |
 |---|---|---|
-| Single Spanish word | `hablar` | ✅ Native audio |
-| Multi-word with Spanish | `floor piso planta` | ✅ Tries `piso` after `floor` fails |
-| Phrase with Spanish | `de la mañana` | ✅ Tries `mañana` |
+| Single word (target language) | `hablar` | ✅ Native audio |
+| Multi-word with target | `floor piso planta` | ✅ Tries `piso` after `floor` fails |
+| Phrase with target | `de la mañana` | ✅ Tries `mañana` |
 | Word with punctuation | `¿cuál?` | ✅ Cleaned to `cuál` |
-| Single English word | `Monday` | ❌ No Spanish recording |
+| Word in wrong language | `Monday` (with Spanish selected) | ❌ No recording in that language |
 | Pure description | `that person informal/formal` | ❌ No match |
-| Japanese / other scripts | `話す` | ❌ Not Spanish |
 
 ---
 

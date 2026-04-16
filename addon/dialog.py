@@ -20,7 +20,7 @@ from aqt.qt import (
 )
 from aqt.utils import showInfo
 
-from .audio_fetcher import get_audio, _LOG
+from .audio_fetcher import get_audio, LANGUAGES, _LOG
 from .i18n import tr
 
 
@@ -61,7 +61,12 @@ class AddAudioDialog(QDialog):
         form.addRow(tr("label_audio_field_2"), self.audio_field2_combo)
 
         self.lang_combo = QComboBox()
-        self.lang_combo.addItems(["es", "en", "fr", "de", "it", "pt"])
+        for code, (name, _, _) in sorted(LANGUAGES.items(), key=lambda x: x[1][0]):
+            self.lang_combo.addItem(f"{name} — {code}", code)
+        # Default to Spanish
+        idx = self.lang_combo.findData("es")
+        if idx >= 0:
+            self.lang_combo.setCurrentIndex(idx)
         form.addRow(tr("label_language"), self.lang_combo)
 
         self.overwrite_check = QCheckBox(tr("check_overwrite"))
@@ -136,7 +141,7 @@ class AddAudioDialog(QDialog):
         audio_field = self.audio_field_combo.currentText()
         audio_field2_raw = self.audio_field2_combo.currentText()
         audio_field2 = None if audio_field2_raw == tr("option_none") else audio_field2_raw
-        lang = self.lang_combo.currentText()
+        lang = self.lang_combo.currentData() or self.lang_combo.currentText()
         overwrite = self.overwrite_check.isChecked()
         use_tts = self.tts_check.isChecked()
 
