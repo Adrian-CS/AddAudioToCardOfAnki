@@ -20,7 +20,10 @@ from aqt.qt import (
 )
 from aqt.utils import showInfo
 
-from .audio_fetcher import get_audio, LANGUAGES, LANG_COVERAGE, _LOG
+from .audio_fetcher import (
+    get_audio, fetch_gtts_audio, LANGUAGES, LANG_COVERAGE,
+    is_cdn_blocked, reset_cdn_blocked, _LOG,
+)
 from .i18n import tr
 
 
@@ -201,6 +204,10 @@ class AddAudioDialog(QDialog):
         updates: list[tuple[int, str]] = []
 
         def process():
+            reset_cdn_blocked()
+            tts_fallback_active = False  # True once CDN is blocked and TTS takes over
+            stopped_early = False
+
             media_dir = mw.col.media.dir()
             for i, (nid, word, has_audio) in enumerate(note_data):
                 if not overwrite and has_audio:
@@ -230,8 +237,20 @@ class AddAudioDialog(QDialog):
                 if cached_file:
                     updates.append((nid, f"[sound:{cached_file}]"))
                     stats["cached"] += 1
+                elif tts_fallback_active:
+                    # CDN already known blocked — go straight to TTS.
+                    audio_bytes = fetch_gtts_audio(word, lang)
+                    if audio_bytes:
+                        filename = _safe_filename(word, lang, "mp3")
+                        with open(os.path.join(media_dir, filename), "wb") as f:
+                            f.write(audio_bytes)
+                        updates.append((nid, f"[sound:{filename}]"))
+                        stats["tts"] += 1
+                    else:
+                        stats["error"] += 1
                 else:
-                    audio_bytes, source = get_audio(word, lang, use_tts)
+                    # Normal path: try Wiktionary only (no TTS yet).
+                    audio_bytes, source = get_audio(word, lang, use_tts=False)
 
                     if audio_bytes:
                         ext = "ogg" if source == "wiktionary" else "mp3"
@@ -240,6 +259,27 @@ class AddAudioDialog(QDialog):
                             f.write(audio_bytes)
                         updates.append((nid, f"[sound:{filename}]"))
                         stats[source] += 1
+                    elif is_cdn_blocked():
+                        if use_tts:
+                            # Switch to TTS for this card and all remaining ones.
+                            tts_fallback_active = True
+                            audio_bytes = fetch_gtts_audio(word, lang)
+                            if audio_bytes:
+                                filename = _safe_filename(word, lang, "mp3")
+                                with open(os.path.join(media_dir, filename), "wb") as f:
+                                    f.write(audio_bytes)
+                                updates.append((nid, f"[sound:{filename}]"))
+                                stats["tts"] += 1
+                            else:
+                                stats["error"] += 1
+                        else:
+                            # TTS disabled — stop here and save what we have.
+                            stopped_early = True
+                            stats["error"] += len(note_data) - i
+                            mw.taskman.run_on_main(
+                                lambda v=i: self.progress_bar.setValue(v)
+                            )
+                            break
                     else:
                         stats["error"] += 1
 
@@ -249,7 +289,10 @@ class AddAudioDialog(QDialog):
 
             audio_fields = [f for f in [audio_field, audio_field2] if f]
             mw.taskman.run_on_main(
-                lambda: self._apply_updates(updates, audio_fields, stats, len(note_data))
+                lambda: self._apply_updates(
+                    updates, audio_fields, stats, len(note_data),
+                    stopped_early, tts_fallback_active,
+                )
             )
 
         mw.taskman.run_in_background(process)
@@ -260,6 +303,8 @@ class AddAudioDialog(QDialog):
         audio_fields: list[str],
         stats: dict,
         total: int,
+        stopped_early: bool = False,
+        tts_fallback_active: bool = False,
     ):
         """Apply note updates on the main thread (DB writes must happen here)."""
         for nid, sound_tag in updates:
@@ -280,6 +325,7 @@ class AddAudioDialog(QDialog):
         self.progress_bar.setVisible(False)
         self.status_label.setText("")
 
+        done = stats["wiktionary"] + stats["tts"] + stats["cached"] + stats["skipped"]
         lines = [tr("result_header", total=total),
                  tr("result_wiktionary", n=stats["wiktionary"])]
         if stats["tts"]:
@@ -290,6 +336,10 @@ class AddAudioDialog(QDialog):
             tr("result_skipped", n=stats["skipped"]),
             tr("result_not_found", n=stats["error"]),
         ]
-        if stats["error"]:
+        if tts_fallback_active:
+            lines.append(tr("result_cdn_tts_switch"))
+        if stopped_early:
+            lines.append(tr("result_cdn_stopped"))
+        if stats["error"] and not stopped_early:
             lines.append(f"\nDebug log: {_LOG}")
         showInfo("\n".join(lines))

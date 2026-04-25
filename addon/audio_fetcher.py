@@ -105,6 +105,20 @@ _dl_last = 0.0
 _DL_INTERVAL = 3.0
 _DL_INTERVAL_MAX = 60.0
 
+# Set to True when a download exhausts all 429 retries — signals to the caller
+# that the CDN has blocked this session, not just that a word has no audio.
+_cdn_blocked = False
+
+
+def is_cdn_blocked() -> bool:
+    return _cdn_blocked
+
+
+def reset_cdn_blocked() -> None:
+    global _cdn_blocked, _DL_INTERVAL
+    _cdn_blocked = False
+    _DL_INTERVAL = 3.0  # also reset the adaptive interval for the new session
+
 # Short function words unlikely to have a standalone Wiktionary audio entry.
 _STOP_WORDS = frozenset({
     "de", "la", "el", "los", "las", "del", "un", "una", "en", "a", "y", "o",
@@ -151,7 +165,7 @@ def _candidate_words(raw: str) -> list[str]:
 
 
 def _http_get(url: str, params: dict | None = None, download: bool = False) -> bytes:
-    global _api_last, _dl_last, _DL_INTERVAL
+    global _api_last, _dl_last, _DL_INTERVAL, _cdn_blocked
 
     if params:
         url = url + "?" + urllib.parse.urlencode(params)
@@ -191,6 +205,8 @@ def _http_get(url: str, params: dict | None = None, download: bool = False) -> b
                 time.sleep(backoff)
                 if attempt < max_attempts - 1:
                     continue
+                # All retries exhausted on a 429 — CDN is blocking this session.
+                _cdn_blocked = True
             raise
         except Exception:
             if attempt < max_attempts - 1:
@@ -275,6 +291,9 @@ def _find_wiktionary_audio_url(
 
 def fetch_wiktionary_audio(word: str, lang: str = "es") -> bytes | None:
     """Download native audio from Wiktionary for *word* in *lang*, or None."""
+    if _cdn_blocked:
+        return None  # skip API calls — downloads will fail anyway
+
     # Build ordered list of API endpoints to try.
     # Native Wiktionary first (better coverage for CJK), then en.wiktionary fallback.
     endpoints: list[str] = []

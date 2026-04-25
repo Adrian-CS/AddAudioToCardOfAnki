@@ -122,6 +122,16 @@ _T: dict[str, dict[str, str]] = {
         "es": "  Sin audio encontrado:         {n}",
         "ja": "  音声なし:                       {n}",
     },
+    "result_cdn_tts_switch": {
+        "en": "\nWikimedia CDN rate limit reached — switched to TTS for remaining cards.",
+        "es": "\nLímite de descargas de Wikimedia alcanzado — se usó TTS para el resto.",
+        "ja": "\nWikimedia CDN のレート制限に達したため、残りのカードは TTS を使用しました。",
+    },
+    "result_cdn_stopped": {
+        "en": "\nWikimedia CDN rate limit reached — processing stopped early.\nCards already processed have been saved. Run again in 1–2 hours to continue.",
+        "es": "\nLímite de descargas de Wikimedia alcanzado — proceso interrumpido.\nLas tarjetas ya procesadas se han guardado. Vuelve a ejecutarlo en 1-2 horas para continuar.",
+        "ja": "\nWikimedia CDN のレート制限に達したため、処理を中断しました。\n処理済みのカードは保存されています。1〜2時間後に再実行してください。",
+    },
 }
 
 
