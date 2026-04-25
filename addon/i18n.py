@@ -107,6 +107,11 @@ _T: dict[str, dict[str, str]] = {
         "es": "  Google TTS (sintético):    {n}",
         "ja": "  Google TTS (合成音声):        {n}",
     },
+    "result_cached": {
+        "en": "  Reused from disk (no re-download): {n}",
+        "es": "  Reutilizadas del disco:            {n}",
+        "ja": "  ディスクから再利用:                  {n}",
+    },
     "result_skipped": {
         "en": "  Skipped (already have audio): {n}",
         "es": "  Saltadas (ya tienen audio):   {n}",

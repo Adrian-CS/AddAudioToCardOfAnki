@@ -100,7 +100,10 @@ _API_INTERVAL = 0.25   # 4 req/sec — safe for en.wiktionary.org
 
 _dl_lock = threading.Lock()
 _dl_last = 0.0
-_DL_INTERVAL = 1.0     # 1 download/sec — avoids 429 from upload.wikimedia.org
+# Base download interval. Grows adaptively when the CDN returns 429 — once the
+# IP is throttled, speeding back up immediately just prolongs the block.
+_DL_INTERVAL = 3.0
+_DL_INTERVAL_MAX = 60.0
 
 # Short function words unlikely to have a standalone Wiktionary audio entry.
 _STOP_WORDS = frozenset({
@@ -148,7 +151,7 @@ def _candidate_words(raw: str) -> list[str]:
 
 
 def _http_get(url: str, params: dict | None = None, download: bool = False) -> bytes:
-    global _api_last, _dl_last
+    global _api_last, _dl_last, _DL_INTERVAL
 
     if params:
         url = url + "?" + urllib.parse.urlencode(params)
@@ -171,20 +174,26 @@ def _http_get(url: str, params: dict | None = None, download: bool = False) -> b
     timeout = 20 if download else REQUEST_TIMEOUT
     req = urllib.request.Request(url, headers=HEADERS)
 
-    for attempt in range(3):
+    # Downloads: 2 attempts only — a third retry after two 429s is unlikely to
+    # succeed and wastes 30+ seconds that delay every subsequent card.
+    max_attempts = 2 if download else 3
+    for attempt in range(max_attempts):
         try:
             with urllib.request.urlopen(req, timeout=timeout, context=_SSL_CTX) as resp:
                 return resp.read()
         except urllib.error.HTTPError as e:
-            if e.code == 429:
-                backoff = 5 * (attempt + 1)
-                _log(f"[429] {url} — waiting {backoff}s (attempt {attempt + 1})")
+            if e.code == 429 and download:
+                # Adaptive backoff: double the global interval so all future
+                # downloads slow down — the CDN throttles at session level.
+                _DL_INTERVAL = min(_DL_INTERVAL * 2, _DL_INTERVAL_MAX)
+                backoff = _DL_INTERVAL * (attempt + 1)
+                _log(f"[429] {url} — waiting {backoff:.0f}s, new interval={_DL_INTERVAL:.0f}s")
                 time.sleep(backoff)
-                if attempt < 2:
+                if attempt < max_attempts - 1:
                     continue
             raise
         except Exception:
-            if attempt < 2:
+            if attempt < max_attempts - 1:
                 time.sleep(1)
             else:
                 raise

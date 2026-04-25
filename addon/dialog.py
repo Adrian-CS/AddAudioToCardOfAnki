@@ -197,7 +197,7 @@ class AddAudioDialog(QDialog):
         self.progress_bar.setVisible(True)
         self.status_label.setText(tr("status_downloading"))
 
-        stats = {"wiktionary": 0, "tts": 0, "skipped": 0, "error": 0}
+        stats = {"wiktionary": 0, "tts": 0, "skipped": 0, "cached": 0, "error": 0}
         updates: list[tuple[int, str]] = []
 
         def process():
@@ -217,17 +217,31 @@ class AddAudioDialog(QDialog):
                     )
                     continue
 
-                audio_bytes, source = get_audio(word, lang, use_tts)
+                # Reuse a file already on disk from a previous run — avoids
+                # re-downloading and burning CDN rate limits unnecessarily.
+                cached_file = None
+                if not overwrite:
+                    for ext in ("ogg", "mp3"):
+                        candidate = _safe_filename(word, lang, ext)
+                        if os.path.exists(os.path.join(media_dir, candidate)):
+                            cached_file = candidate
+                            break
 
-                if audio_bytes:
-                    ext = "ogg" if source == "wiktionary" else "mp3"
-                    filename = _safe_filename(word, lang, ext)
-                    with open(os.path.join(media_dir, filename), "wb") as f:
-                        f.write(audio_bytes)
-                    updates.append((nid, f"[sound:{filename}]"))
-                    stats[source] += 1
+                if cached_file:
+                    updates.append((nid, f"[sound:{cached_file}]"))
+                    stats["cached"] += 1
                 else:
-                    stats["error"] += 1
+                    audio_bytes, source = get_audio(word, lang, use_tts)
+
+                    if audio_bytes:
+                        ext = "ogg" if source == "wiktionary" else "mp3"
+                        filename = _safe_filename(word, lang, ext)
+                        with open(os.path.join(media_dir, filename), "wb") as f:
+                            f.write(audio_bytes)
+                        updates.append((nid, f"[sound:{filename}]"))
+                        stats[source] += 1
+                    else:
+                        stats["error"] += 1
 
                 mw.taskman.run_on_main(
                     lambda v=i + 1: self.progress_bar.setValue(v)
@@ -270,6 +284,8 @@ class AddAudioDialog(QDialog):
                  tr("result_wiktionary", n=stats["wiktionary"])]
         if stats["tts"]:
             lines.append(tr("result_tts", n=stats["tts"]))
+        if stats["cached"]:
+            lines.append(tr("result_cached", n=stats["cached"]))
         lines += [
             tr("result_skipped", n=stats["skipped"]),
             tr("result_not_found", n=stats["error"]),
