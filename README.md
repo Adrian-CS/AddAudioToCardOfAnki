@@ -103,10 +103,27 @@ The add-on appears under **Tools → Add Audio to Cards...**
 
 ### 3. Options
 
-| Option | Description |
-|---|---|
-| **Overwrite existing audio** | Re-fetch audio even if the field already contains a sound tag |
-| **Use TTS as fallback** | If no native Wiktionary recording exists, generate audio with Google Translate TTS |
+#### Overwrite existing audio
+
+When unchecked *(default)*, cards that already have a `[sound:…]` tag in the audio field are skipped entirely. This makes re-runs fast and safe — only cards that still lack audio are processed.
+
+When checked, every card is re-fetched regardless. Use this to replace an old TTS recording with a newly available native one, or to fix a corrupt file.
+
+> **Tip:** the add-on also skips re-downloading files that are already saved on disk, even when "Overwrite" is on. A file that exists in Anki's media folder is reused instantly without any network request.
+
+#### Use TTS as fallback
+
+Controls what happens when no native Wiktionary recording is found **and** when the Wikimedia CDN rate-limits the session.
+
+| TTS setting | No native recording exists | Wikimedia CDN blocks the session |
+|---|---|---|
+| **Off** *(default)* | Card left with no audio | Processing stops. Cards already done are saved. Run again in 1–2 hours to continue. |
+| **On** | Google Translate TTS is used | Seamlessly switches all remaining cards to TTS. The summary notes where the switch happened. |
+
+**Which should I choose?**
+
+- **TTS off** — best when native audio quality matters and you are happy to run the add-on multiple times over a few days until all cards are covered.
+- **TTS on** — best when you want the entire deck filled in one go. Google Translate TTS for Spanish, French, German and other well-supported languages is high quality and perfectly suitable for language learning.
 
 ### 4. Click "Add Audio"
 
@@ -116,11 +133,19 @@ A progress bar shows the processing status. When done, a summary appears:
 Done — 777 cards processed
 
   Native audio (Wiktionary): 312
+  Google TTS (synthetic):    200
+  Reused from disk:           50
   Skipped (already have audio): 0
-  No audio found: 465
+  No audio found: 215
 ```
 
-Cards with no audio found are typically English-language field values, multi-word descriptions, or words not yet recorded on Wiktionary.
+#### Why does the CDN block the session?
+
+Wikimedia Commons (where all Wiktionary audio files are hosted) enforces a per-session download rate limit on `upload.wikimedia.org`. After roughly 50–150 successful downloads in one session, the server starts returning HTTP 429 errors and will not serve more files regardless of how long you wait between requests.
+
+This is not a bug in the add-on — it is an intentional limit by Wikimedia to protect shared infrastructure. The add-on detects the block as soon as it happens and either switches to TTS or stops cleanly, so no work is lost.
+
+**Re-run strategy (TTS off):** because successfully downloaded files are cached on disk, each subsequent run picks up exactly where the previous one left off. Running the add-on once a day for a few days will gradually fill the entire deck without any manual intervention.
 
 ---
 

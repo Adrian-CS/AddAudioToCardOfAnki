@@ -103,10 +103,27 @@ El complemento aparece en **Herramientas → Añadir Audio a Tarjetas...**
 
 ### 3. Opciones
 
-| Opción | Descripción |
-|---|---|
-| **Sobreescribir audio existente** | Volver a buscar audio aunque el campo ya contenga una etiqueta de sonido |
-| **Usar TTS como respaldo** | Si no existe grabación nativa en Wiktionary, generar audio con Google Translate TTS |
+#### Sobreescribir audio existente
+
+Cuando está desmarcado *(por defecto)*, las tarjetas que ya tienen una etiqueta `[sound:…]` en el campo de audio se saltan por completo. Esto hace que las ejecuciones posteriores sean rápidas y seguras: solo se procesan las tarjetas que aún no tienen audio.
+
+Cuando está marcado, se vuelve a buscar audio en todas las tarjetas sin excepción. Útil para sustituir una grabación TTS antigua por un audio nativo recién disponible, o para reparar un archivo corrupto.
+
+> **Consejo:** el complemento también evita re-descargar archivos que ya están guardados en el disco, incluso cuando "Sobreescribir" está activo. Un archivo que ya existe en la carpeta de medios de Anki se reutiliza al instante sin ninguna petición de red.
+
+#### Usar TTS como respaldo
+
+Controla qué ocurre cuando no se encuentra una grabación nativa en Wiktionary **y** cuando el CDN de Wikimedia limita la sesión de descargas.
+
+| TTS | Sin grabación nativa | CDN de Wikimedia bloquea la sesión |
+|---|---|---|
+| **Desactivado** *(por defecto)* | La tarjeta queda sin audio | El proceso se detiene. Las tarjetas ya completadas se guardan. Vuelve a ejecutarlo en 1-2 horas para continuar. |
+| **Activado** | Se usa Google Translate TTS | Cambia automáticamente al TTS para el resto del mazo. El resumen indica en qué punto ocurrió el cambio. |
+
+**¿Cuál elegir?**
+
+- **TTS desactivado** — ideal cuando la calidad del audio nativo es importante y no te importa ejecutar el complemento varias veces a lo largo de unos días hasta completar el mazo.
+- **TTS activado** — ideal cuando quieres rellenar todo el mazo de una sola vez. El TTS de Google Translate para español, francés, alemán y otros idiomas bien soportados es de alta calidad y perfectamente adecuado para el aprendizaje de idiomas.
 
 ### 4. Hacer clic en "Añadir Audio"
 
@@ -116,11 +133,19 @@ Una barra de progreso muestra el estado del procesamiento. Al finalizar, aparece
 Completado — 777 tarjetas procesadas
 
   Audio nativo (Wiktionary): 312
-  Saltadas (ya tienen audio): 0
-  Sin audio encontrado: 465
+  Google TTS (sintético):    200
+  Reutilizadas del disco:     50
+  Saltadas (ya tienen audio):  0
+  Sin audio encontrado: 215
 ```
 
-Las tarjetas sin audio suelen ser campos en inglés, descripciones de varias palabras o palabras que aún no tienen grabación en Wiktionary.
+#### ¿Por qué el CDN bloquea la sesión?
+
+Wikimedia Commons (donde están alojados todos los archivos de audio de Wiktionary) aplica un límite de descargas por sesión en `upload.wikimedia.org`. Tras unas 50-150 descargas exitosas en una misma sesión, el servidor devuelve errores HTTP 429 y deja de servir archivos independientemente del tiempo que se espere entre peticiones.
+
+Esto no es un fallo del complemento — es un límite intencionado de Wikimedia para proteger su infraestructura compartida. El complemento detecta el bloqueo en cuanto ocurre y o bien cambia al TTS o bien se detiene limpiamente, sin perder ningún trabajo ya realizado.
+
+**Estrategia de re-ejecución (TTS desactivado):** como los archivos descargados con éxito se guardan en disco, cada ejecución posterior retoma exactamente donde dejó la anterior. Ejecutando el complemento una vez al día durante unos días se irá completando el mazo entero sin ninguna intervención manual.
 
 ---
 
